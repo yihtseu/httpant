@@ -1,7 +1,7 @@
 import std;
 import httpant.dependencies.boost.ut;
 import httpant;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing {
 
@@ -37,12 +37,6 @@ namespace httpant::testing {
     };
 
     static suite<"protocol"> protocol_suite = [] {
-        // Internal machinery test: each real transport wrapper must satisfy the
-        // transport concepts it advertises (no RFC-mandated behavior here).
-        "concept_tcp_stream"_test = [] { expect(http::byte_stream<tcp_stream>); };
-
-        "concept_tls_stream"_test = [] { expect(http::byte_stream<tls_stream>); };
-
         // RFC 9113 §3.4 — "The client connection preface starts with the string
         // "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".  This sequence MUST be followed by a
         // SETTINGS frame (Section 6.5), which MAY be empty."

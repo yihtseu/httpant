@@ -1,7 +1,7 @@
 import std;
 import httpant.dependencies.boost.ut;
 import httpant;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing {
 
@@ -1149,9 +1149,8 @@ namespace httpant::testing {
         // the recipient MUST consider the message to be incomplete and close the
         // connection." A chunked body truncated by EOF is detected by llhttp_finish
         // (HPE_INVALID_EOF_STATE) and must ride the same connection-scoped
-        // re-scope as any other body-phase framing error: the failure is
-        // delivered as a close_connection protocol_error and the connection is
-        // latched closed.
+        // close action as other body-phase framing errors. The condition
+        // identifies the peer closing early and the connection is latched closed.
         "http1_chunked_body_truncated_by_eof_closes_connection"_test = [] {
             pipe c2s, s2c;
             mock_stream transport{.input = c2s, .output = s2c};
@@ -1169,7 +1168,8 @@ namespace httpant::testing {
             try {
                 static_cast<void>(run_sync(drain_body(parsed.body)));
             } catch (const http::protocol_error& failure) {
-                threw = failure.info().scope == http::error_scope::connection && std::holds_alternative<http::close_connection>(failure.action());
+                threw = failure.info().condition == http::error_condition::peer_closed && failure.info().scope == http::error_scope::connection &&
+                        std::holds_alternative<http::close_connection>(failure.action());
             }
             expect(threw);
             expect(server.should_close());

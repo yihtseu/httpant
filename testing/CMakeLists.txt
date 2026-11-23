@@ -2,26 +2,48 @@
 
 find_package(ut CONFIG REQUIRED)
 
-# The protocol suite: every source here except the engine's, which are
-# executables of their own with a main() and a scratch directory.
-file(GLOB_RECURSE SOURCES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS *.cpp)
-list(FILTER SOURCES EXCLUDE REGEX "^io/|^certificate[.]cpp$")
-add_executable(httpant-test ${SOURCES})
-target_sources(httpant-test PRIVATE FILE_SET CXX_MODULES BASE_DIRS "${PROJECT_SOURCE_DIR}"
-  FILES "${PROJECT_SOURCE_DIR}/import/boost.ut.ixx" test_support.ixx)
-target_link_libraries(httpant-test PRIVATE httpant-example-support Boost::ut)
-add_test(NAME httpant-test COMMAND httpant-test)
-set_tests_properties(httpant-test PROPERTIES TIMEOUT 60 FIXTURES_REQUIRED tls-credentials
-  WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+add_library(httpant-test-support STATIC)
+target_sources(httpant-test-support PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${PROJECT_SOURCE_DIR}/import"
+  FILES "${PROJECT_SOURCE_DIR}/import/boost.ut.ixx")
+target_include_directories(httpant-test-support INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(httpant-test-support PUBLIC httpant-example-support Boost::ut)
+
+function(add_httpant_suite NAME)
+  set(TARGET httpant-${NAME}-test)
+  add_executable(${TARGET} main.cpp ${ARGN})
+  target_link_libraries(${TARGET} PRIVATE httpant-test-support)
+  add_test(NAME httpant.${NAME} COMMAND ${TARGET})
+  set_tests_properties(httpant.${NAME} PROPERTIES TIMEOUT 60 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+endfunction()
+
+add_httpant_suite(caching caching.cpp)
+add_httpant_suite(conformance conformance.cpp)
+add_httpant_suite(conformance-h3 conformance_h3.cpp)
+add_httpant_suite(connect connect.cpp)
+add_httpant_suite(cookie cookie.cpp)
+add_httpant_suite(coroutine coroutine/api.cpp)
+add_httpant_suite(error error.cpp)
+add_httpant_suite(execution execution/api.cpp execution/boundary.cpp execution/lifetime.cpp)
+add_httpant_suite(fetch fetch.cpp)
+add_httpant_suite(http1-framing http1_framing.cpp)
+add_httpant_suite(message message.cpp)
+add_httpant_suite(protocol protocol.cpp)
+add_httpant_suite(semantics semantics.cpp)
+add_httpant_suite(task task.cpp)
+add_httpant_suite(tls tls.cpp)
+add_httpant_suite(websocket websocket.cpp)
+set_tests_properties(httpant.tls PROPERTIES FIXTURES_REQUIRED tls-credentials)
 
 if(HTTPANT_ENABLE_IO)
-  add_executable(io-test io/native.cpp)
-  target_link_libraries(io-test PRIVATE httpant-io)
-  add_test(NAME io COMMAND io-test "${HTTPANT_DATA_DIR}")
-  add_executable(execution-test io/execution.cpp)
-  target_link_libraries(execution-test PRIVATE httpant-io)
-  add_test(NAME execution COMMAND execution-test "${HTTPANT_DATA_DIR}")
-  set_tests_properties(io execution PROPERTIES TIMEOUT 60)
+  # The engine tests link httpant-io alone, never httpant-test-support: the
+  # engine is protocol-independent by design and its tests keep it so.
+  add_executable(httpant-io-native-test io/native.cpp)
+  target_link_libraries(httpant-io-native-test PRIVATE httpant-io)
+  add_test(NAME httpant.io.native COMMAND httpant-io-native-test "${HTTPANT_DATA_DIR}")
+  add_executable(httpant-io-execution-test io/execution.cpp)
+  target_link_libraries(httpant-io-execution-test PRIVATE httpant-io)
+  add_test(NAME httpant.io.execution COMMAND httpant-io-execution-test "${HTTPANT_DATA_DIR}")
+  set_tests_properties(httpant.io.native httpant.io.execution PROPERTIES TIMEOUT 60)
 endif()
 
 add_executable(httpant-certificate certificate.cpp)

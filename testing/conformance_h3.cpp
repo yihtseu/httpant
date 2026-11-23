@@ -1,6 +1,6 @@
 import httpant.dependencies.boost.ut;
 import std;
-import httpant.testing;
+#include "test_support.hpp"
 import httpant;
 
 namespace httpant::testing {
@@ -151,7 +151,7 @@ namespace httpant::testing {
 
         // Internal-machinery test double: a recording stream factory whose stream
         // writes and acknowledgements complete only when the test opens the matching
-        // gate, modeled on recording_stream_factory (test_support.ixx) but
+        // gate, modeled on recording_stream_factory (test_support.hpp) but
         // self-contained here. The synchronous recording factory can never park
         // inside flush_output, so two internal paths stay unexercised without these
         // gates: the flush_gate waiter queue (a second flush() while the first is
@@ -418,7 +418,7 @@ namespace httpant::testing {
 
             auto inbound(std::int64_t id) -> inbound_queue& { return inbound_[id]; }
 
-            // RFC 9000 §2.1 — see mock_stream_factory (test_support.ixx) for the id
+            // RFC 9000 §2.1 — see mock_stream_factory (test_support.hpp) for the id
             // scheme: per-role spaces so both sides of a test can coexist.
             auto async_open_bidirectional(std::stop_token) -> open_awaiter {
                 auto id = next_bidi;
@@ -479,7 +479,7 @@ namespace httpant::testing {
             }
         };
 
-        // Same routing behavior as route_writes_to (test_support.ixx), for the gated
+        // Same routing behavior as route_writes_to (test_support.hpp), for the gated
         // factory: locally opened streams are announced to the peer's accept loop and
         // every recorded write is fed to the peer's inbound queue.
         inline void route_gated_writes_to(gated_stream_factory& from, gated_stream_factory& to) {

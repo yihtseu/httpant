@@ -1,4 +1,4 @@
-export module httpant.testing;
+#pragma once
 
 import httpant.dependencies.boost.ut;
 import httpant.dependencies.asio;
@@ -7,7 +7,7 @@ import std;
 import httpant;
 import httpant.tls;
 
-export namespace httpant::testing {
+namespace httpant::testing {
 
     using namespace std::literals;
 

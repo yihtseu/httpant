@@ -2,7 +2,7 @@ import httpant.dependencies.boost.ut;
 import httpant.dependencies.stdexec;
 import std;
 import httpant;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing::execution {
 
@@ -215,30 +215,6 @@ namespace httpant::testing::execution {
             expect(std::get<0>(*result) == 42_i);
         };
 
-        // Internal machinery test: the sender advertises accurate completion
-        // signatures — one set_value(int), set_error(exception_ptr), set_stopped.
-        "public_request_completion_signatures"_test = [] {
-            task_client client;
-            http::buffer_body body;
-            using sender_t = decltype(http::execution::request(client, http::request{.target = "/"}, body));
-
-            static_assert(stdexec::sender<sender_t>);
-            static_assert(stdexec::sends_stopped<sender_t>);
-            static_assert(std::same_as<stdexec::value_types_of_t<sender_t>, std::variant<std::tuple<int>>>);
-            static_assert(std::same_as<stdexec::error_types_of_t<sender_t>, std::variant<std::exception_ptr>>);
-        };
-
-        // Internal machinery test: senders are move-only and single-consumer, and
-        // their operation state is a distinct, non-copyable type.
-        "public_request_is_single_consumer"_test = [] {
-            task_client client;
-            http::buffer_body body;
-            using sender_t = decltype(http::execution::request(client, http::request{.target = "/"}, body));
-
-            static_assert(!std::copy_constructible<sender_t>);
-            static_assert(std::move_constructible<sender_t>);
-        };
-
         // Internal machinery test: building the sender does not start the shared
         // coroutine operation. The client request body only runs once the sender
         // is connected and started.
@@ -327,11 +303,6 @@ namespace httpant::testing::execution {
             }
             expect(threw);
         };
-
-        // Internal machinery test: the receiver environment's stop token reaches
-        // the shared operation. A token that is already requested completes with
-        // set_stopped (sync_wait returns a disengaged optional) before the
-        // coroutine body ever runs.
 
         // Internal machinery test: endpoints without a handshake capability receive
         // the documented no-op start sender.

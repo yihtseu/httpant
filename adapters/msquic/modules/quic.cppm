@@ -1,10 +1,10 @@
 export module httpant.quic;
-import httpant.exception;
 
 import std;
 import httpant;
 import httpant.io;
 import httpant.dependencies.msquic;
+export import :credentials;
 
 export namespace http::quic {
     using http::operator co_await;
@@ -109,44 +109,7 @@ export namespace http::quic {
             };
             auto wait(std::stop_token stop) -> sender { return {this, stop}; }
         };
-        template <template <class> class Queue, template <class> class Local> struct state;
     } // namespace detail
-
-    class credentials {
-        bool server_;
-        std::string certificate_, key_, ca_;
-        explicit credentials(bool server) : server_(server) {}
-
-    public:
-        static auto server(const std::string& certificate, const std::string& key) -> credentials {
-            credentials result{true};
-            result.certificate_ = certificate;
-            result.key_ = key;
-            return result;
-        }
-        static auto client(const std::string& ca = {}) -> credentials {
-            credentials result{false};
-            result.ca_ = ca;
-            return result;
-        }
-        auto is_server() const noexcept -> bool { return server_; }
-
-    private:
-        template <template <class> class Queue, template <class> class Local> friend struct detail::state;
-        void load(HQUIC configuration) const {
-            QUIC_CREDENTIAL_CONFIG config{};
-            QUIC_CERTIFICATE_FILE file{key_.c_str(), certificate_.c_str()};
-            config.Type = server_ ? QUIC_CREDENTIAL_TYPE_CERTIFICATE_FILE : QUIC_CREDENTIAL_TYPE_NONE;
-            config.Flags = server_ ? QUIC_CREDENTIAL_FLAG_NONE : QUIC_CREDENTIAL_FLAG_CLIENT;
-            if (server_)
-                config.CertificateFile = &file;
-            if (!ca_.empty()) {
-                config.Flags = static_cast<QUIC_CREDENTIAL_FLAGS>(config.Flags | QUIC_CREDENTIAL_FLAG_SET_CA_CERTIFICATE_FILE);
-                config.CaCertificateFile = ca_.c_str();
-            }
-            detail::check(detail::library().api.ConfigurationLoadCredential(configuration, &config), "load credentials");
-        }
-    };
 
     namespace detail {
         struct transmission {
@@ -199,7 +162,6 @@ export namespace http::quic {
             };
             io::net::basic_scheduler<Queue> scheduler;
             const MsQuicApi& api = library().api;
-            credentials tls;
             HQUIC configuration = nullptr, listener = nullptr, conn = nullptr;
             std::uint16_t port = 0;
             Queue<record> records;
@@ -226,13 +188,13 @@ export namespace http::quic {
                             owner.drain();
                         } catch (...) {
                             if (!owner.failure)
-                                owner.failure = http::exceptions::current_exception();
+                                owner.failure = std::current_exception();
                         }
                         owner.changed.notify();
                     };
                 }
             };
-            state(io::net::basic_scheduler<Queue> scheduler, credentials tls) : scheduler(scheduler), tls(std::move(tls)), changed(scheduler) {}
+            explicit state(io::net::basic_scheduler<Queue> scheduler) : scheduler(scheduler), changed(scheduler) {}
             ~state() {
                 if (listener)
                     api.ListenerClose(listener);
@@ -375,12 +337,12 @@ export namespace http::quic {
                 stream.owner->publish(std::move(item));
                 return pending ? QUIC_STATUS_PENDING : QUIC_STATUS_SUCCESS;
             }
-            void initialize(io::net::ip::udp::endpoint local, io::net::ip::udp::endpoint remote, const std::string& name) {
+            void initialize(io::net::ip::udp::endpoint local, io::net::ip::udp::endpoint remote, const std::string& name, const credentials& tls) {
                 MsQuicSettings settings;
                 settings.SetPeerBidiStreamCount(128).SetPeerUnidiStreamCount(16).SetSendBufferingEnabled(false).SetIdleTimeoutMs(10000);
                 QUIC_BUFFER alpn{2, reinterpret_cast<std::uint8_t*>(const_cast<char*>("h3"))};
                 check(api.ConfigurationOpen(library().registration, &alpn, 1, &settings, sizeof(settings), nullptr, &configuration), "open configuration");
-                tls.load(configuration);
+                check(tls.load(api, configuration), "load credentials");
                 QUIC_ADDR address{};
                 std::memcpy(&address, local.data(), local.size());
                 if (tls.is_server()) {
@@ -407,7 +369,7 @@ export namespace http::quic {
             void drain() {
                 record item;
                 if (delivery_failed.exchange(false, std::memory_order_acq_rel) && !failure)
-                    failure = http::exceptions::make_exception_ptr(std::system_error(std::make_error_code(std::errc::not_enough_memory)));
+                    failure = std::make_exception_ptr(std::system_error(std::make_error_code(std::errc::not_enough_memory)));
                 while (records.try_pop(item)) {
                     auto* stream = item.stream.get();
                     try {
@@ -426,7 +388,7 @@ export namespace http::quic {
                             break;
                         case kind::transport_close:
                             if (!closing)
-                                failure = http::exceptions::make_exception_ptr(std::runtime_error(std::format("quic: transport shutdown: {}", item.status)));
+                                failure = std::make_exception_ptr(std::runtime_error(std::format("quic: transport shutdown: {}", item.status)));
                             peer_closed = true;
                             break;
                         case kind::peer_close:
@@ -489,7 +451,7 @@ export namespace http::quic {
                         std::terminate();
                     } catch (...) {
                         if (!failure)
-                            failure = http::exceptions::current_exception();
+                            failure = std::current_exception();
                     }
                 }
             }
@@ -701,11 +663,11 @@ export namespace http::quic {
     public:
         using stream_type = stream<Queue, Local>;
         static constexpr auto completion_order = http::stream_completion_order::serialized;
-        connection(io::net::basic_scheduler<Queue> scheduler, io::net::ip::udp::endpoint local, credentials tls, io::net::ip::udp::endpoint remote = {},
+        connection(io::net::basic_scheduler<Queue> scheduler, io::net::ip::udp::endpoint local, const credentials& tls, io::net::ip::udp::endpoint remote = {},
                    std::string server_name = "localhost")
-            : state_(std::make_shared<detail::state<Queue, Local>>(scheduler, std::move(tls))) {
+            : state_(std::make_shared<detail::state<Queue, Local>>(scheduler)) {
             try {
-                state_->initialize(local, remote, server_name);
+                state_->initialize(local, remote, server_name, tls);
             } catch (...) {
                 if (state_->listener) {
                     state_->api.ListenerClose(state_->listener);
@@ -759,7 +721,7 @@ export namespace http::quic {
                 co_await body(*this);
                 co_await async_close(http::application_error{0});
             } catch (...) {
-                failure = http::exceptions::current_exception();
+                failure = std::current_exception();
             }
             co_await http::with_stop(std::stop_token{}, state_->finish());
             state_->running = false;

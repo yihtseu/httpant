@@ -440,20 +440,18 @@ export namespace http::v1 {
 
             void finish_on_eof(std::string_view message) {
                 auto err = llhttp_finish(&parser_);
-                if (err != HPE_OK && err != HPE_PAUSED && err != HPE_PAUSED_UPGRADE)
-                    // llhttp_finish flags a message truncated mid-body (e.g. a chunked
-                    // body cut off by EOF) as HPE_INVALID_EOF_STATE; this is the
-                    // body-phase framing error of RFC 9112 §6.3 item 6 and must ride
-                    // the same connection-scoped re-scope (and closure latch) as any
-                    // other body-phase failure.
+                if (err != HPE_OK && err != HPE_PAUSED && err != HPE_PAUSED_UPGRADE && err != HPE_INVALID_EOF_STATE)
                     rethrow_body_phase_failure(make_parse_error(parser_, err));
-                if (!state_.complete)
+                // EOF interrupted a framed message. Keep this distinct from malformed bytes.
+                if (err == HPE_INVALID_EOF_STATE || !state_.complete) {
+                    connection_closed_ = true;
                     throw protocol_error{error_info{
                                              .condition = error_condition::peer_closed,
                                              .exchange_identity = std::nullopt,
                                              .library_code = std::nullopt,
                                          },
                                          close_connection{std::nullopt}, std::string(message)};
+                }
                 // The message was completed by connection closure, so it is not
                 // persistent (RFC 9112 §6.3).
                 state_.keep_alive = llhttp_should_keep_alive(&parser_) != 0;

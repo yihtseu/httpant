@@ -5,6 +5,7 @@ module;
 export module httpant.dependencies.llhttp;
 
 // Export the API used by Httpant; keep the upstream declarations in the global module.
+export using ::HPE_INVALID_EOF_STATE;
 export using ::HPE_INVALID_HEADER_TOKEN;
 export using ::HPE_OK;
 export using ::HPE_PAUSED;

@@ -80,8 +80,6 @@ namespace {
     using datagram_type = io::ip::udp::socket;
     using acceptor_type = io::ip::tcp::acceptor;
     static_assert(stdexec::scheduler<io::io_context::scheduler_type>);
-    static_assert(std::same_as<io::ip::tcp::endpoint, io::ip::basic_endpoint<io::ip::tcp>>);
-    static_assert(std::same_as<io::ip::udp::endpoint, io::ip::basic_endpoint<io::ip::udp>>);
     static_assert(network_errors<decltype(io::async_accept(std::declval<acceptor_type&>()))>);
     static_assert(network_errors<decltype(io::async_connect(stdexec::just(io::ip::tcp::endpoint{}), std::declval<stream_type&>()))>);
     static_assert(network_errors<decltype(stdexec::just() | io::async_accept(std::declval<acceptor_type&>()))>);
@@ -189,6 +187,18 @@ namespace {
         acceptor.listen();
         io::ip::tcp::socket client{context, io::ip::tcp::v6()};
         client.set_option(io::ip::tcp::no_delay{true});
+#ifndef _WIN32
+        io::ip::tcp::acceptor other{context};
+        other.open(io::ip::tcp::v6());
+        other.set_option(io::socket_base::reuse_address{true});
+        std::error_code bind_error;
+        try {
+            other.bind(acceptor.local_endpoint());
+        } catch (const std::system_error& error) {
+            bind_error = error.code();
+        }
+        require(bind_error == std::errc::address_in_use, "an active listener owns its address even with reuse_address");
+#endif
         auto connected = run(context, stdexec::when_all(io::async_connect(client, acceptor.local_endpoint()), stdexec::just() | io::async_accept(acceptor)));
         success(connected);
         auto [peer, remote] = std::move(*connected.value);

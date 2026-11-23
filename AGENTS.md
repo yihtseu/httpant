@@ -12,7 +12,7 @@ service plugs underneath. Read `README.md` first.
 | `modules/tls.cppm` | The optional `httpant.tls` module over caller-supplied byte streams |
 | `import/` | Foundation modules: C library wrappers, shared stdexec definitions, `httpant.memory`, `httpant.queue`, the production `asio` wrapper, and `wolfssl`/`boost.ut` wrappers |
 | `adapters/msquic/` | The consumer-side MsQuic `stream_factory`; links MsQuic itself and is not part of the httpant package |
-| `testing/` | Protocol tests are globbed into one executable; `testing/io/` contains standalone engine and sender suites that need a scratch directory |
+| `testing/` | Protocol suites have separate CTest entries. `testing/io/` contains the native engine and sender suites that need a scratch directory. |
 | `examples/`, `bench/` | Optional examples and benchmarks; build commands are in `README.md` |
 
 ## Rules

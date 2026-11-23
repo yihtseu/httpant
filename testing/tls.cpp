@@ -3,7 +3,7 @@ import httpant;
 import httpant.tls;
 import httpant.dependencies.wolfssl;
 import httpant.dependencies.boost.ut;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing {
     using namespace boost::ut;

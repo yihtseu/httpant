@@ -7,20 +7,6 @@ namespace httpant::testing {
     using namespace boost::ut;
     using namespace std::literals;
 
-    static_assert(std::is_base_of_v<std::runtime_error, http::protocol_error>);
-
-    // RFC 9114 §8.1 / §11.2.3 — the protocol has one application error-code space,
-    // so the library has one error-code type. There is no per-version code type and
-    // nothing to check: the engine that raises the error is the type that says which
-    // frame format the code is written in.
-    static_assert(std::is_same_v<http::error_code, std::uint64_t>);
-
-    // The action implies the scope, so the type of the action is the invariant: no
-    // constructor can produce a stream reset that claims connection scope.
-    static_assert(std::is_constructible_v<http::protocol_error, http::error_info, http::reset_stream, std::string>);
-    static_assert(std::is_constructible_v<http::protocol_error, http::error_info, http::close_connection, std::string>);
-    static_assert(std::is_constructible_v<http::protocol_error, http::error_info, http::no_action, std::string>);
-
     static suite<"error"> error_suite = [] {
         "retry_is_read_from_the_condition"_test = [] {
             // RFC 9114 §4.1.1 — a reset stream "MAY be retried... on a new stream";

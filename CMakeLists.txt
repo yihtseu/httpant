@@ -112,7 +112,8 @@ if(HTTPANT_BUILD_BENCHMARKS)
   target_link_libraries(httpant-boundary-cost PRIVATE httpant)
   if(HTTPANT_ENABLE_IO)
     add_executable(io-bench bench/io.cpp)
-    target_link_libraries(io-bench PRIVATE httpant-io-support)
+    find_package(argparse CONFIG REQUIRED)
+    target_link_libraries(io-bench PRIVATE httpant-io-support argparse::argparse)
     target_compile_definitions(io-bench PRIVATE
       BENCH_BUILD="$<CONFIG>"
       BENCH_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")

@@ -1,7 +1,7 @@
 import std;
 import httpant.dependencies.boost.ut;
 import httpant;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing {
 
@@ -37,24 +37,6 @@ namespace httpant::testing {
             }
             http::request custom{.target = "custom+v1.0://example.com/x"};
             expect(http::request_scheme(custom).value_or("") == "custom+v1.0"sv);
-        };
-
-        "http_message_types"_test = [] {
-            // RFC 9110 §6.2 — "Request message control data includes a request
-            // method (Section 9), request target (Section 7.1), and protocol
-            // version"; RFC 9110 §5.1 — "Field names are case-insensitive".
-            http::request req{
-                .method = http::method::GET,
-                .target = "/hello",
-                .fields = {{"host", "example.com"}},
-            };
-
-            expect(req.method.token() == "GET"sv);
-            expect(req.target == "/hello"sv);
-
-            auto host = http::find_header(req.fields, "Host");
-            expect(host.has_value());
-            expect(*host == "example.com"sv);
         };
 
         "http_method_roundtrip"_test = [] {

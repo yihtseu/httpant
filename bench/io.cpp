@@ -1,3 +1,4 @@
+#include <argparse/argparse.hpp>
 import std;
 import httpant;
 import httpant.io;
@@ -208,42 +209,32 @@ namespace {
 int main(int argc, char** argv) {
     try {
         options config;
-        for (int i = 1; i < argc; ++i) {
-            std::string_view option{argv[i]};
-            if (option == "--help") {
-                std::println("Usage: io-bench --directory EXISTING_DATA_DIR [--scenario all|post|timer|tcp|udp|file] [--address IPv4] [--iterations N] "
-                             "[--warmup N] [--concurrency N] [--bytes N] [--samples N] [--seconds N] [--timer-us N] [--timeout-seconds N]");
-                return 0;
-            }
-            app::require(i + 1 < argc, "missing benchmark argument value");
-            std::string_view value{argv[++i]};
-            if (option == "--address")
-                config.address = app::parse_endpoint(value, 0);
-            else if (option == "--scenario")
-                config.scenario = value;
-            else if (option == "--directory")
-                config.directory = std::filesystem::path{std::u8string_view{reinterpret_cast<const char8_t*>(value.data()), value.size()}};
-            else if (option == "--iterations")
-                config.iterations = app::number(value);
-            else if (option == "--warmup")
-                config.warmup = app::number(value, true);
-            else if (option == "--concurrency")
-                config.concurrency = app::number(value);
-            else if (option == "--bytes")
-                config.bytes = app::number(value);
-            else if (option == "--seconds") {
-                auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), config.seconds);
-                app::require(error == std::errc{} && end == value.data() + value.size() && std::isfinite(config.seconds) && config.seconds > 0,
-                             "invalid sample duration");
-            } else if (option == "--samples")
-                config.samples = app::number(value);
-            else if (option == "--timer-us")
-                config.timer = std::chrono::microseconds{app::number(value)};
-            else if (option == "--timeout-seconds")
-                config.timeout = std::chrono::seconds{app::number(value)};
-            else
-                throw std::invalid_argument(std::format("unknown benchmark option: {}", option));
-        }
+        argparse::ArgumentParser program{"io-bench", "", argparse::default_arguments::help};
+        program.add_argument("--directory").required();
+        program.add_argument("--scenario").default_value(config.scenario).choices("all", "post", "timer", "tcp", "udp", "file");
+        program.add_argument("--address").default_value(std::string{"127.0.0.1"});
+        auto number = [&](std::string_view option, std::size_t& target, bool allow_zero = false) {
+            program.add_argument(std::string{option}).action([&target, allow_zero](const std::string& value) {
+                target = app::number(value, allow_zero);
+            });
+        };
+        number("--iterations", config.iterations);
+        number("--warmup", config.warmup, true);
+        number("--concurrency", config.concurrency);
+        number("--bytes", config.bytes);
+        number("--samples", config.samples);
+        program.add_argument("--seconds").action([&](const std::string& value) {
+            auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), config.seconds);
+            app::require(error == std::errc{} && end == value.data() + value.size() && std::isfinite(config.seconds) && config.seconds > 0,
+                         "invalid sample duration");
+        });
+        program.add_argument("--timer-us").action([&](const std::string& value) { config.timer = std::chrono::microseconds{app::number(value)}; });
+        program.add_argument("--timeout-seconds").action([&](const std::string& value) { config.timeout = std::chrono::seconds{app::number(value)}; });
+        program.parse_args(argc, argv);
+        config.scenario = program.get<std::string>("--scenario");
+        config.address = app::parse_endpoint(program.get<std::string>("--address"), 0);
+        const auto directory = program.get<std::string>("--directory");
+        config.directory = std::filesystem::path{std::u8string_view{reinterpret_cast<const char8_t*>(directory.data()), directory.size()}};
         app::require(config.concurrency <= std::numeric_limits<std::size_t>::max() / config.iterations, "operation count overflow");
 #ifdef _WIN32
         app::require(config.directory.root_name().native().size() == 2 && config.directory.root_name().native()[1] == L':',

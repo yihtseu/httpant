@@ -147,10 +147,6 @@ namespace native_io {
         int yes = value;
         if (::setsockopt(static_cast<int>(h), key == 2 ? IPPROTO_TCP : SOL_SOCKET, option, &yes, sizeof yes) < 0)
             fail("socket option");
-#ifdef SO_REUSEPORT
-        if (key == 0 && ::setsockopt(static_cast<int>(h), SOL_SOCKET, SO_REUSEPORT, &yes, sizeof yes) < 0)
-            fail("SO_REUSEPORT");
-#endif
     }
     void shutdown(handle h, int direction) noexcept {
         if (h != invalid_handle)

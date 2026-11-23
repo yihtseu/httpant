@@ -1,3 +1,9 @@
+module;
+#pragma push_macro("_GNU_SOURCE")
+#include <wolfssl/options.h>
+#pragma pop_macro("_GNU_SOURCE")
+#include <wolfssl/wolfcrypt/coding.h>
+#include <wolfssl/wolfcrypt/hash.h>
 export module httpant:websocket;
 import std;
 import :message;
@@ -71,72 +77,21 @@ export namespace http::websocket {
                 throw failure(1007, "WebSocket close reason is not UTF-8");
         }
         inline auto base64(std::span<const std::byte> bytes) -> std::string {
-            constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            std::string out;
-            for (std::size_t i = 0; i < bytes.size(); i += 3) {
-                auto value = number(bytes[i]) << 16;
-                if (i + 1 < bytes.size())
-                    value |= number(bytes[i + 1]) << 8;
-                if (i + 2 < bytes.size())
-                    value |= number(bytes[i + 2]);
-                out += alphabet[(value >> 18) & 63];
-                out += alphabet[(value >> 12) & 63];
-                out += i + 1 < bytes.size() ? alphabet[(value >> 6) & 63] : '=';
-                out += i + 2 < bytes.size() ? alphabet[value & 63] : '=';
-            }
+            std::string out(4 * ((bytes.size() + 2) / 3) + 1, '\0');
+            auto length = static_cast<word32>(out.size());
+            if (Base64_Encode_NoNl(reinterpret_cast<const unsigned char*>(bytes.data()), static_cast<word32>(bytes.size()),
+                                   reinterpret_cast<unsigned char*>(out.data()), &length) != 0)
+                throw failure(1011, "cannot encode WebSocket handshake");
+            out.resize(length);
             return out;
         }
-        // SHA-1 is mandated by the opening handshake; it is not an authenticator.
+
+        // The opening handshake uses the digest specified by RFC 6455.
         inline auto sha1(std::string_view text) -> std::array<std::byte, 20> {
-            auto raw = std::as_bytes(std::span{text});
-            std::vector<std::byte> bytes(raw.begin(), raw.end());
-            bytes.push_back(std::byte{0x80});
-            while (bytes.size() % 64 != 56)
-                bytes.push_back(std::byte{});
-            auto bits = static_cast<std::uint64_t>(text.size()) * 8;
-            for (int shift = 56; shift >= 0; shift -= 8)
-                bytes.push_back(std::byte((bits >> shift) & 255));
-            std::array<std::uint32_t, 5> hash{0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
-            for (std::size_t offset = 0; offset < bytes.size(); offset += 64) {
-                std::array<std::uint32_t, 80> words{};
-                for (std::size_t i = 0; i < 16; ++i)
-                    for (std::size_t j = 0; j < 4; ++j)
-                        words[i] = (words[i] << 8) | number(bytes[offset + i * 4 + j]);
-                for (std::size_t i = 16; i < 80; ++i)
-                    words[i] = std::rotl(words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16], 1);
-                auto [a, b, c, d, e] = hash;
-                for (std::size_t i = 0; i < 80; ++i) {
-                    std::uint32_t f, k;
-                    if (i < 20) {
-                        f = (b & c) | (~b & d);
-                        k = 0x5a827999;
-                    } else if (i < 40) {
-                        f = b ^ c ^ d;
-                        k = 0x6ed9eba1;
-                    } else if (i < 60) {
-                        f = (b & c) | (b & d) | (c & d);
-                        k = 0x8f1bbcdc;
-                    } else {
-                        f = b ^ c ^ d;
-                        k = 0xca62c1d6;
-                    }
-                    auto next = std::rotl(a, 5) + f + e + k + words[i];
-                    e = d;
-                    d = c;
-                    c = std::rotl(b, 30);
-                    b = a;
-                    a = next;
-                }
-                hash[0] += a;
-                hash[1] += b;
-                hash[2] += c;
-                hash[3] += d;
-                hash[4] += e;
-            }
             std::array<std::byte, 20> out{};
-            for (std::size_t i = 0; i < 5; ++i)
-                for (int j = 0; j < 4; ++j)
-                    out[i * 4 + j] = std::byte((hash[i] >> (24 - j * 8)) & 255);
+            if (wc_ShaHash(reinterpret_cast<const unsigned char*>(text.data()), static_cast<word32>(text.size()),
+                           reinterpret_cast<unsigned char*>(out.data())) != 0)
+                throw failure(1011, "cannot compute WebSocket handshake digest");
             return out;
         }
         inline auto equal_name(std::string_view a, std::string_view b) -> bool {

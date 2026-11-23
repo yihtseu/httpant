@@ -4,6 +4,8 @@ import httpant.io;
 import httpant.quic;
 import httpant.examples.io;
 
+auto test_credentials(std::string_view input) -> std::pair<http::quic::credentials, http::quic::credentials>;
+
 namespace {
     namespace io = http::io::net;
     namespace app = httpant::example;
@@ -40,6 +42,7 @@ namespace {
     using scheduler = io::basic_scheduler<observed>;
     using connection = http::quic::connection<observed, confined>;
     using stream = http::quic::stream<observed, confined>;
+    using credentials = http::quic::credentials;
 
     struct completion {
         using receiver_concept = stdexec::receiver_t;
@@ -164,14 +167,12 @@ namespace {
         }
     };
 
-    auto transfer(scheduler scheduler, const std::filesystem::path& directory) -> http::task<void> {
-        auto cert = (directory / "quic-cert.pem").string();
-        auto key = (directory / "quic-key.pem").string();
-        connection server{scheduler, io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()}, http::quic::credentials::server(cert, key)};
+    auto transfer(scheduler scheduler, const credentials& server_tls, const credentials& client_tls) -> http::task<void> {
+        connection server{scheduler, io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()}, server_tls};
         relay network{scheduler, {app::loopback.address(), server.port()}};
         connection client{scheduler,
                           io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()},
-                          http::quic::credentials::client(cert),
+                          client_tls,
                           {app::loopback.address(), network.front.local_endpoint().port()}};
         std::vector<std::byte> payload(2 * 1024 * 1024);
         for (std::size_t i = 0; i < payload.size(); ++i)
@@ -241,13 +242,11 @@ namespace {
         app::require(network.dropped, "loss test did not discard the initial packet");
     }
 
-    auto reject_identity(scheduler scheduler, const std::filesystem::path& directory) -> http::task<void> {
-        auto cert = (directory / "quic-cert.pem").string();
-        connection server{scheduler, io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()},
-                          http::quic::credentials::server(cert, (directory / "quic-key.pem").string())};
+    auto reject_identity(scheduler scheduler, const credentials& server_tls, const credentials& client_tls) -> http::task<void> {
+        connection server{scheduler, io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()}, server_tls};
         connection client{scheduler,
                           io::ip::udp::endpoint{app::loopback.address(), app::loopback.port()},
-                          http::quic::credentials::client(cert),
+                          client_tls,
                           {app::loopback.address(), server.port()},
                           "wrong.example"};
         bool entered = false, rejected = false;
@@ -272,10 +271,8 @@ namespace {
         }
         app::require(rejected && !entered, "TLS accepted a certificate for the wrong identity");
     }
-    auto cancel_handshake(scheduler scheduler, const std::filesystem::path& directory) -> http::task<void> {
-        connection server{scheduler,
-                          {app::loopback.address(), 0},
-                          http::quic::credentials::server((directory / "quic-cert.pem").string(), (directory / "quic-key.pem").string())};
+    auto cancel_handshake(scheduler scheduler, const credentials& server_tls) -> http::task<void> {
+        connection server{scheduler, {app::loopback.address(), 0}, server_tls};
         std::stop_source cancel;
         bool entered = false, stopped = false;
         auto stop_later = [&]() -> http::task<void> {
@@ -304,12 +301,12 @@ namespace {
 
 int main(int argc, char** argv) {
     try {
-        app::require(argc == 2 && std::filesystem::is_directory(argv[1]), "quic-test requires the existing build directory");
+        app::require(argc == 2, "quic-test requires a credential fixture");
         io::basic_io_context<observed> context;
-        std::filesystem::path directory{argv[1]};
-        run(context, transfer(context.get_scheduler(), directory));
-        run(context, reject_identity(context.get_scheduler(), directory));
-        run(context, cancel_handshake(context.get_scheduler(), directory));
+        const auto [server, client] = test_credentials(argv[1]);
+        run(context, transfer(context.get_scheduler(), server, client));
+        run(context, reject_identity(context.get_scheduler(), server, client));
+        run(context, cancel_handshake(context.get_scheduler(), server));
         app::require(worker_posts.load() > 0, "QUIC events did not cross the worker queue");
         std::println("QUIC msquic: loss recovery, receive credit, ACK ownership, stream directions, reset isolation, cancellation, TLS identity passed");
         return 0;

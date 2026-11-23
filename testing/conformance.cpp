@@ -1,6 +1,6 @@
 import httpant.dependencies.boost.ut;
 import std;
-import httpant.testing;
+#include "test_support.hpp"
 import httpant;
 
 namespace httpant::testing {

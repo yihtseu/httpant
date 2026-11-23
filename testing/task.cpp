@@ -2,7 +2,7 @@ import httpant.dependencies.boost.ut;
 import httpant.dependencies.stdexec;
 import std;
 import httpant;
-import httpant.testing;
+#include "test_support.hpp"
 
 namespace httpant::testing {
 

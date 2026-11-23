@@ -125,7 +125,7 @@ on when you want it:
 ```sh
 cmake --preset debug
 cmake --build --preset debug
-ctest --preset debug -R '^(io|execution)$'
+ctest --preset debug -R '^httpant[.]io[.]'
 ```
 
 ```cpp
@@ -370,8 +370,10 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-`debug` tests the protocol, the native engine and the examples; `release`
-builds them optimized, with the benchmarks and without tests. Add
+`debug` tests the protocol, the native engine and the examples. Use
+`ctest --preset debug -R '^httpant[.]io[.]'` for the engine suites or
+`ctest --preset debug -R '^httpant[.]tls$'` for TLS and its credential fixture.
+`release` builds them optimized, with the benchmarks and without tests. Add
 `-DHTTPANT_ENABLE_IO=OFF` for the protocol alone. Each preset builds in
 `build/<preset>`. The MsQuic adapter is a separate project under
 `adapters/msquic`.

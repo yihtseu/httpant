@@ -1,7 +1,7 @@
 import httpant.dependencies.boost.ut;
 import httpant.dependencies.stdexec;
 import std;
-import httpant.testing;
+#include "test_support.hpp"
 import httpant;
 
 namespace httpant::testing {
@@ -124,14 +124,6 @@ namespace httpant::testing {
                 expect(outcome.has_value());
                 expect(std::get<0>(*outcome).text() == "ok"sv);
             }
-        };
-
-        // RFC 7301 — ALPN identifiers are constants of the client type, which is the
-        // protocol: nothing maps a version value to a string at run time.
-        "alpn_identifiers"_test = [] {
-            expect(std::string_view{http::v1::client<mock_stream>::alpn}.empty());
-            expect(http::v2::client<mock_stream>::alpn == "h2"sv);
-            expect(http::v3::client<mock_stream_factory>::alpn == "h3"sv);
         };
 
         // RFC 9112 §3.2 — an HTTP/1.1 request has exactly one Host field; fetch

@@ -84,7 +84,8 @@ httpant_add_module(httpant httpant
   modules/websocket.cppm
   modules/caching.cppm
   modules/cookie.cppm)
-target_link_libraries(httpant PUBLIC httpant-imports)
+target_link_libraries(httpant PUBLIC httpant-imports PRIVATE wolfssl::wolfssl)
+target_compile_definitions(httpant PRIVATE ${HTTPANT_PLATFORM_DEFINITIONS})
 
 ## Native I/O engine
 #

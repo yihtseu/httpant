@@ -46,6 +46,7 @@ export namespace native_io {
         std::atomic<bool> closed{false};
         const std::atomic<bool>* lifetime_closed = nullptr;
         std::shared_ptr<void> lifetime;
+        void request_cancel() noexcept { cancelled.store(true, std::memory_order_release); }
         auto is_closed() const noexcept -> bool {
             return closed.load(std::memory_order_acquire) || (lifetime_closed && lifetime_closed->load(std::memory_order_acquire));
         }
@@ -82,6 +83,20 @@ export namespace native_io {
         struct impl;
         std::unique_ptr<impl> impl_;
     };
+
+    template <template <class> class Queue> void engine<Queue>::start(request& r) noexcept {
+        r.rejected = false;
+        if (auto error = impl_->push(r)) {
+            r.rejected = true;
+            r.complete(r, -1, error);
+            return;
+        }
+        impl_->signal();
+    }
+    template <template <class> class Queue> void engine<Queue>::stop() noexcept {
+        impl_->stopped.store(true, std::memory_order_release);
+        impl_->signal();
+    }
 
     auto open_socket(bool datagram, bool v6) -> handle;
     void listen(handle, int);

@@ -527,9 +527,15 @@ export namespace http::io::net {
         };
     } // namespace detail
     struct async_accept_t {
-        template <class Protocol, template <class> class Queue> auto operator()(basic_socket_acceptor<Protocol, Queue>& acceptor) const noexcept {
+        // Accept on the listener's scheduler and bind the new socket to the scheduler that will serve it.
+        template <class Protocol, template <class> class Queue>
+        auto operator()(basic_socket_acceptor<Protocol, Queue>& acceptor, basic_scheduler<Queue> peer) const noexcept {
+            using sender = typename detail::accept_sender<Protocol, Queue>::source_type;
             auto spec = detail::access::spec(acceptor, native_io::operation::accept);
-            return detail::accept_sender<Protocol, Queue>{{std::move(spec), {{acceptor.get_scheduler().engine()}}}, acceptor};
+            return sender{std::move(spec), {{peer.engine()}}};
+        }
+        template <class Protocol, template <class> class Queue> auto operator()(basic_socket_acceptor<Protocol, Queue>& acceptor) const noexcept {
+            return detail::accept_sender<Protocol, Queue>{(*this)(acceptor, acceptor.get_scheduler()), acceptor};
         }
         template <stdexec::sender Sender, class Protocol, template <class> class Queue>
         auto operator()(Sender&& sender, basic_socket_acceptor<Protocol, Queue>& acceptor) const {

@@ -56,7 +56,7 @@ def command(arguments, log, environment, timeout):
 def fingerprint(build, configuration):
     digest = hashlib.sha256((platform.node() + platform.platform()).encode())
     paths = [executable(build, name, configuration) for name in (
-        "io-test", "execution-test", "http-example", "io-bench")]
+        "httpant-io-native-test", "httpant-io-execution-test", "http-example", "io-bench")]
     for path in paths:
         digest.update(str(path).encode())
         digest.update(path.read_bytes())
@@ -235,7 +235,7 @@ def main():
                               "-DHTTPANT_BUILD_BENCHMARKS=ON", "-DHTTPANT_BUILD_EXAMPLES=ON",
                               "-DHTTPANT_BUILD_TESTS=ON", f"-DHTTPANT_DATA_DIR={directory}"]
                 command(configure, build / f"{backend}-native-configure.log", environment, 1200)
-                targets = ["io-bench", "http-example", "io-test", "execution-test", "httpant-certificate"]
+                targets = ["io-bench", "http-example", "httpant-io-native-test", "httpant-io-execution-test", "httpant-certificate"]
                 command(["cmake", "--build", build, "--config", arguments.configuration,
                          "--parallel", arguments.jobs, "--target", *targets],
                         build / f"{backend}-native-build.log", environment, 1200)
